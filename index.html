@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="ar">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Sina Rummy — Web Prototype</title>
+<style>
+  :root{--bg:#0f1724;--card:#ffffff;--accent:#1fb6ff;--muted:#94a3b8;}
+  body{font-family: system-ui,Segoe UI,Roboto,-apple-system; margin:0; background:linear-gradient(180deg,#021028, #072033);color:#e6eef6;display:flex;flex-direction:column;align-items:center;min-height:100vh}
+  header{padding:18px;text-align:center}
+  h1{margin:0;font-size:24px;color:var(--accent)}
+  .container{width:100%;max-width:920px;padding:12px;box-sizing:border-box}
+  .row{display:flex;gap:12px;align-items:flex-start;flex-wrap:wrap}
+  .card-ui{background:rgba(255,255,255,0.04);border-radius:12px;padding:12px;flex:1;min-width:260px}
+  .hand{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+  .card{background:var(--card);color:#000;padding:8px 10px;border-radius:8px;min-width:48px;text-align:center;font-weight:700;cursor:pointer;box-shadow:0 2px 6px rgba(0,0,0,0.4)}
+  .card.selected{outline:3px solid rgba(31,182,255,0.3)}
+  .controls{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+  button{background:var(--accent);border:none;color:#012;padding:8px 12px;border-radius:10px;font-weight:700;cursor:pointer}
+  button.ghost{background:transparent;border:1px solid rgba(255,255,255,0.08);color:var(--muted)}
+  .pile{display:flex;gap:8px;align-items:center}
+  .tile{width:72px;height:96px;border-radius:8px;background:#0b1320;display:flex;align-items:center;justify-content:center;color:#cfe9ff;border:2px solid rgba(255,255,255,0.03);font-weight:800}
+  footer{margin-top:auto;padding:12px;color:var(--muted);font-size:13px}
+  .info{font-size:14px;color:var(--muted);margin-top:8px}
+  .center{text-align:center}
+  .winner{background:linear-gradient(90deg,#ffd166,#ff7b7b);color:#091421;padding:8px;border-radius:8px;font-weight:800}
+</style>
+</head>
+<body>
+<header>
+  <h1>Sina Rummy — Web Prototype</h1>
+  <div class="info">نسخة تجريبية: Pass-and-Play (نسخة مبسطة)</div>
+</header>
+
+<div class="container" id="app">
+  <div class="row">
+    <div class="card-ui" id="loginCard">
+      <h3>تسجيل الدخول</h3>
+      <div style="margin-top:8px">
+        <input id="playerName" placeholder="اكتب اسمك" style="width:100%;padding:10px;border-radius:8px;border:none" />
+      </div>
+      <div class="controls">
+        <button id="btnStart">ابدأ اللعبة</button>
+        <button class="ghost" id="btnDemo">جرب سرعة (Auto-deal)</button>
+      </div>
+      <div class="info">اللعبة تدعم 2 لاعب محلي (مناوبة على نفس الجهاز). الهدف: تفضّي يدك أولًا.</div>
+    </div>
+
+    <div class="card-ui" id="gameCard" style="display:none">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <div><strong id="status">جاهز</strong></div>
+        <div><small id="turnInfo">دور: -</small></div>
+      </div>
+
+      <div style="margin-top:12px" class="row">
+        <div style="flex:1">
+          <h4>كومة السحب</h4>
+          <div class="pile">
+            <div id="deckTile" class="tile">40+</div>
+            <div style="width:8px"></div>
+            <div>
+              <h4>المرمى</h4>
+              <div id="discardTile" class="tile">—</div>
+            </div>
+          </div>
+          <div class="controls" style="margin-top:12px">
+            <button id="drawDeck">اسحب من السحب</button>
+            <button id="takeDiscard" class="ghost">خد من المرمى</button>
+          </div>
+        </div>
+
+        <div style="flex:1">
+          <h4>لاعبون</h4>
+          <div id="playersList"></div>
+        </div>
+      </div>
+
+      <hr style="margin-top:10px;margin-bottom:10px;border:none;border-top:1px solid rgba(255,255,255,0.04)">
+
+      <div>
+        <h4>يدك — <span id="playerLabel">Player</span></h4>
+        <div class="hand" id="handArea"></div>
+        <div class="controls">
+          <button id="btnDiscard" class="ghost">ارمِ البطاقة المختارة</button>
+          <button id="btnPass">انتهي دور — مرّر</button>
+        </div>
+      </div>
+
+      <div style="margin-top:12px" class="center">
+        <div id="message"></div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<footer class="center">تصميم مبدئي — Sina Rummy prototype</footer>
+
+<script>
+(() => {
+  // Helper: create deck
+  const R = ['A','2','3','4','5','6','7','8','9','10','J','Q','K'];
+  const S = ['♠','♥','♦','♣'];
+  const JOKER = 'JK';
+
+  function createDeck(){
+    const deck = [];
+    for(const s of S) for(const r of R) deck.push({r,s,id: r + s + Math.random().toString(36).slice(2,7)});
+    // add two jokers
+    deck.push({r:'JOKER', s:'', id:'JK1'}); deck.push({r:'JOKER', s:'', id:'JK2'});
+    return deck;
+  }
+  function shuffle(a){
+    for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]];}
+    return a;
+  }
+  // state
+  let state = {
+    deck: [],
+    discard: [],
+    players: [],
+    current: 0
+  };
+  const ui = {
+    loginCard: document.getElementById('loginCard'),
+    gameCard: document.getElementById('gameCard'),
+    playerName: document.getElementById('playerName'),
+    btnStart: document.getElementById('btnStart'),
+    btnDemo: document.getElementById('btnDemo'),
+    deckTile: document.getElementById('deckTile'),
+    discardTile: document.getElementById('discardTile'),
+    drawDeck: document.getElementById('drawDeck'),
+    takeDiscard: document.getElementById('takeDiscard'),
+    playersList: document.getElementById('playersList'),
+    handArea: document.getElementById('handArea'),
+    playerLabel: document.getElementById('playerLabel'),
+    status: document.getElementById('status'),
+    turnInfo: document.getElementById('turnInfo'),
+    btnDiscard: document.getElementById('btnDiscard'),
+    btnPass: document.getElementById('btnPass'),
+    message: document.getElementById('message')
+  };
+
+  function newGame(playerName){
+    // two players local
+    const p1 = {name: playerName || 'Player1', hand: []};
+    const p2 = {name: 'Player2', hand: []};
+    state.players = [p1, p2];
+    state.deck = shuffle(createDeck());
+    state.discard = [];
+    // deal 13 each
+    for(let i=0;i<13;i++){
+      state.players.forEach(pl => pl.hand.push(state.deck.pop()));
+    }
+    // place one to discard
+    state.discard.push(state.deck.pop());
+    state.current = 0;
+    renderAll();
+  }
+
+  function renderAll(){
+    ui.deckTile.textContent = state.deck.length > 0 ? state.deck.length : '0';
+    ui.discardTile.textContent = state.discard.length>0 ? cardLabel(state.discard[state.discard.length-1]) : '—';
+    // players list
+    ui.playersList.innerHTML = '';
+    state.players.forEach((p, idx) => {
+      const el = document.createElement('div');
+      el.style.padding = '6px 8px';
+      el.style.borderRadius = '8px';
+      el.style.marginBottom = '6px';
+      el.style.background = idx===state.current ? 'linear-gradient(90deg,#06273a,#073349)' : 'transparent';
+      el.innerHTML = `<strong>${p.name}</strong> — أوراق: ${p.hand.length}`;
+      ui.playersList.appendChild(el);
+    });
+    // hand
+    const me = state.players[state.current];
+    ui.playerLabel.textContent = me.name;
+    ui.handArea.innerHTML = '';
+    me.hand.forEach((c, idx) => {
+      const d = document.createElement('div');
+      d.className = 'card';
+      d.dataset.index = idx;
+      d.textContent = cardLabel(c);
+      d.addEventListener('click', ()=> {
+        // toggle selected
+        d.classList.toggle('selected');
+      });
+      ui.handArea.appendChild(d);
+    });
+    ui.turnInfo.textContent = `دور: ${state.players[state.current].name}`;
+    ui.message.textContent = '';
+  }
+
+  function cardLabel(c){
+    if(!c) return '';
+    if(c.r==='JOKER') return '🃏';
+    return c.r + c.s;
+  }
+
+  // actions
+  ui.btnStart.onclick = () => {
+    const name = ui.playerName.value.trim() || 'Player1';
+    ui.loginCard.style.display = 'none';
+    ui.gameCard.style.display = 'block';
+    newGame(name);
+  };
+  ui.btnDemo.onclick = () => {
+    ui.playerName.value = 'Sina';
+    ui.btnStart.click();
+  };
+
+  ui.drawDeck.onclick = () => {
+    if(state.deck.length===0){ ui.message.textContent = 'كومة السحب فارغة!'; return; }
+    const card = state.deck.pop();
+    state.players[state.current].hand.push(card);
+    renderAll();
+  };
+
+  ui.takeDiscard.onclick = () => {
+    if(state.discard.length===0){ ui.message.textContent = 'لا يوجد تتمة في المرمى'; return; }
+    const card = state.discard.pop();
+    state.players[state.current].hand.push(card);
+    renderAll();
+  };
+
+  ui.btnDiscard.onclick = () => {
+    // get selected card(s) from handArea
+    const sel = Array.from(ui.handArea.querySelectorAll('.card.selected'));
+    if(sel.length===0){ ui.message.textContent = 'إختر بطاقة واحدة على الأقل لترميها.'; return; }
+    // we'll discard only the first selected (simple)
+    const idx = Number(sel[0].dataset.index);
+    const played = state.players[state.current].hand.splice(idx,1)[0];
+    state.discard.push(played);
+    // check win
+    if(state.players[state.current].hand.length === 0){
+      ui.message.innerHTML = `<span class="winner">${state.players[state.current].name} فاز! 🎉</span>`;
+      renderAll();
+      return;
+    }
+    // end turn automatically
+    nextTurn();
+  };
+
+  ui.btnPass.onclick = () => {
+    nextTurn();
+  };
+
+  function nextTurn(){
+    state.current = (state.current + 1) % state.players.length;
+    renderAll();
+  }
+
+  // allow clicking discard pile to take
+  ui.discardTile.addEventListener('click', ()=> ui.takeDiscard.click());
+
+  // initial
+  renderAll();
+})();
+</script>
